@@ -1,8 +1,10 @@
-# FIFA World Cup 2026 Live Tracker
+# ⚽ FIFA World Cup 2026 Live Tracker
+
+**🔴 LIVE:** https://subhajitg87.github.io/fifa-2026-tracker/
 
 A real-time interactive tracker for the FIFA World Cup 2026, featuring live scores, group standings, knockout bracket, and direct links to official match reports. Built with vanilla HTML/CSS/JS using the **football-data.org API** for reliable live updates.
 
-![Live Status](https://img.shields.io/badge/Status-Active-green) ![License: MIT](https://img.shields.io/badge/License-MIT-blue)
+![Live Status](https://img.shields.io/badge/Status-Live_on_GitHub_Pages-green) ![License: MIT](https://img.shields.io/badge/License-MIT-blue)
 
 ## ✨ Features
 
@@ -17,31 +19,22 @@ A real-time interactive tracker for the FIFA World Cup 2026, featuring live scor
 
 ## 🚀 Quick Start
 
-### No Setup Required
-1. **Open in browser:** Download `wc2026_tracker.html` and open in any modern browser
-2. **Enter API key:** On first load, you'll be prompted to enter a free football-data.org API key
-3. **Done!** Tracker auto-refreshes every 60 seconds
+### Just Open the Link
+👉 **https://subhajitg87.github.io/fifa-2026-tracker/**
 
-### Get a Free API Key
+That's it! The tracker loads instantly.
+
+### Optionally Add Live API Key (For Freshest Data)
+
+For real-time live scores, register for a **free API key** from football-data.org:
+
 1. Visit [football-data.org/client/register](https://www.football-data.org/client/register)
 2. Sign up (free tier includes 10 requests/minute — plenty for this tracker)
 3. Copy your API key from the dashboard
-4. Paste into the tracker prompt on first run
+4. When the tracker prompts on first load, paste your key
+5. Live data will auto-refresh every 60 seconds
 
-### Optional: Self-Host on GitHub Pages
-```bash
-# Clone repo
-git clone https://github.com/yourusername/fifa-2026-tracker.git
-cd fifa-2026-tracker
-
-# No build step needed! Just push to gh-pages branch
-git checkout --orphan gh-pages
-git add wc2026_tracker.html
-git commit -m "Deploy tracker"
-git push -u origin gh-pages
-
-# Access at: https://yourusername.github.io/fifa-2026-tracker/wc2026_tracker.html
-```
+**Without an API key?** The tracker still works with base fixtures (all 64 group matches pre-loaded).
 
 ## 📖 Usage Guide
 
@@ -85,26 +78,27 @@ git push -u origin gh-pages
 | **Storage** | LocalStorage for API key persistence |
 | **No Build** | Single HTML file; no Node, Webpack, or frameworks needed |
 
-## ⚙️ Configuration
+## 💻 Development
 
-### Environment
-Stored in browser `localStorage` — survives page reloads:
-- `FOOTBALL_DATA_API_KEY` — Your API key (prompt on first load)
+### Customize the Tracker
 
-### Constants (Edit if Needed)
-Open `wc2026_tracker.html` and modify:
+Edit `index.html` and modify:
 ```javascript
 const REFRESH_MS = 60000;           // Polling interval (ms)
-const CACHE_DURATION_MS = 15 * 60 * 1000; // Cache TTL
+const CACHE_DURATION_MS = 15 * 60 * 1000; // Cache duration
 const WORLD_CUP_2026_ID = 730;      // football-data.org competition ID
 ```
 
-### Clear API Key
-```javascript
-// In browser DevTools console:
-localStorage.removeItem("FOOTBALL_DATA_API_KEY");
-location.reload();
-```
+### Add Your Own Data Source
+
+Replace the `fetchFromFootballDataAPI()` function to use a different API.
+
+### Deploy Your Own Copy
+
+1. Fork this repo on GitHub
+2. Rename `wc2026_tracker.html` to `index.html` (or ensure index.html exists)
+3. Enable GitHub Pages in repo Settings → Pages
+4. Access at: `https://yourusername.github.io/fifa-2026-tracker/`
 
 ## 🔍 Troubleshooting
 
@@ -132,9 +126,9 @@ location.reload();
    | Issue | Solution |
    |-------|----------|
    | `❌ Not set` in status | Enter API key when prompted on first load |
-   | No matches in testApi | Tournament may not have started; API returns empty data during pre-match period |
-   | "Cached" badge shows | API unavailable; using cached data (auto-refreshes every 60s) |
-   | Still seeing 404 errors | Refresh the page and run `wc2026.testApi()` again |
+   | No matches shown | Tournament may not have started; API returns empty until matches begin |
+   | "Cached" badge persists | API unavailable; using saved data (auto-retries every 60s) |
+   | Page shows README | File wasn't renamed to `index.html`. Check GitHub repo files. |
 
 5. **Re-enter API Key**:
    ```javascript
