@@ -99,7 +99,7 @@ Replace the `fetchFromFootballDataAPI()` function to use a different API.
 ### Deploy Your Own Copy
 
 1. Fork this repo on GitHub
-2. Rename `wc2026_tracker.html` to `index.html` (or ensure index.html exists)
+2. Ensure `index.html` exists in the root
 3. Enable GitHub Pages in repo Settings → Pages
 4. Access at: `https://yourusername.github.io/fifa-2026-tracker/`
 
@@ -111,7 +111,7 @@ Replace the `fetchFromFootballDataAPI()` function to use a different API.
    ```javascript
    wc2026.testApi()
    ```
-   Should show: `✓ Proxy N worked!` + match count
+   Should show: `✓ Connected! Got X matches` + sample match list
 
 2. **Check API Key**:
    ```javascript
@@ -147,17 +147,18 @@ Replace the `fetchFromFootballDataAPI()` function to use a different API.
 
 ### How CORS Works Here
 
-The `football-data.org` API does **not** send `Access-Control-Allow-Origin` headers, so browsers block direct requests from GitHub Pages (a different origin). This tracker solves it with a **3-proxy fallback chain**:
+The `football-data.org` API does **not** send `Access-Control-Allow-Origin` headers, so browsers block direct requests from GitHub Pages (a different origin). This tracker solves it with a **4-strategy fallback chain**, each with its own independent timeout:
 
-| Priority | Strategy | Details |
-|----------|----------|-----|
-| 1 | Direct API call | Tried first; works only if the API ever adds CORS headers |
-| 2a | `corsproxy.io` | Primary CORS proxy |
-| 2b | `api.allorigins.win` | Fallback proxy |
-| 2c | `thingproxy.freeboard.io` | Last-resort proxy |
+| Strategy | Proxy | Timeout | Auth Header | Notes |
+|----------|-------|---------|-------------|-------|
+| 1 | Direct API call | 5s | `X-Auth-Token` | Works only if API adds CORS support |
+| 2 | `corsproxy.io` | 8s | `X-Auth-Token` | Forwards request headers; uses raw URL (not encoded) |
+| 3 | `api.allorigins.win` | 10s | None (simple GET) | Returns JSON wrapper `{contents: "..."}` — no custom headers avoids CORS preflight |
+| 4 | `thingproxy.freeboard.io` | 8s | None | Last-resort fallback |
 
 - **No setup needed** — Proxy routing is automatic and transparent
-- **Resilient** — If one proxy is down, the next one is tried
+- **Independent timeouts** — Each strategy gets its own `AbortController`; a slow proxy 1 won't kill proxies 2–4
+- **Resilient** — If one proxy is down, the next one is tried immediately
 - **Fallback system** — If all proxies fail, uses 15-min cached data or base fixtures
 - **Auto-refresh** — Updates every 60 seconds while page is open
 

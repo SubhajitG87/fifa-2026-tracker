@@ -1524,135 +1524,124 @@
     
     // CORS proxy chain — football-data.org doesn't send CORS headers,
     // so GitHub Pages (different origin) needs a server-side proxy.
-    const CORS_PROXIES = [
-      (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-      (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      (url) => `https://thingproxy.freeboard.io/fetch/${url}`
-    ];
+    // Each proxy has its own fetch strategy because they handle headers differently.
 
-    async function fetchViaProxy(apiUrl, proxyFn, signal) {
-      const proxiedUrl = proxyFn(apiUrl);
-      console.log("  → Trying proxy:", proxiedUrl.slice(0, 60) + "...");
-      const res = await fetch(proxiedUrl, {
-        method: "GET",
-        headers: { "Accept": "application/json" },
-        cache: "no-store",
-        signal
+    function parseApiResponse(matchesData) {
+      if (!matchesData.matches || matchesData.matches.length === 0) {
+        console.warn("⚠ API returned empty matches array (tournament may not have started)");
+        return BASE_FIXTURES;
+      }
+      return matchesData.matches.map((match) => {
+        const homeId = resolveTeamId(match.homeTeam?.name || "");
+        const awayId = resolveTeamId(match.awayTeam?.name || "");
+        return {
+          id: String(match.id),
+          homeName: match.homeTeam?.name || "TBD",
+          awayName: match.awayTeam?.name || "TBD",
+          homeId,
+          awayId,
+          homeScore: match.score?.fullTime?.home ?? match.score?.halfTime?.home,
+          awayScore: match.score?.fullTime?.away ?? match.score?.halfTime?.away,
+          status: match.status === "FINISHED" ? "Final" : match.status === "LIVE" ? "Live" : "Scheduled",
+          completed: match.status === "FINISHED",
+          date: match.utcDate || "",
+          stageText: match.stage || "Group Stage",
+          matchId: match.id
+        };
       });
-      if (!res.ok) throw new Error(`Proxy returned HTTP ${res.status}`);
-      return res.json();
+    }
+
+    function timedFetch(url, options, ms = 8000) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), ms);
+      return fetch(url, { ...options, signal: controller.signal })
+        .finally(() => clearTimeout(timeout));
     }
 
     async function fetchFromFootballDataAPI() {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+      const apiUrl = `${FOOTBALL_DATA_API}/competitions/${WORLD_CUP_2026_ID}/matches?status=SCHEDULED,LIVE,FINISHED`;
       
+      console.log("Target API:", apiUrl);
+      console.log("API Key:", API_KEY ? "✓ Set (" + API_KEY.length + " chars)" : "✗ Not set");
+
+      const errors = [];
+
+      // ── Strategy 1: Direct API call ──────────────────────────────
+      // Works only if football-data.org ever adds CORS headers (unlikely)
       try {
-        // Build the target URL with the API key as a query param
-        // (since we can't send custom headers through most CORS proxies)
-        const apiUrl = `${FOOTBALL_DATA_API}/competitions/${WORLD_CUP_2026_ID}/matches?status=SCHEDULED,LIVE,FINISHED`;
-        
-        console.log("Target API:", apiUrl);
-        console.log("API Key:", API_KEY ? "✓ Set (" + API_KEY.length + " chars)" : "✗ Not set");
-
-        let matchesData = null;
-        let lastError = null;
-
-        // Strategy 1: Try direct fetch (works if API ever adds CORS headers)
-        try {
-          console.log("[Strategy 1] Direct API call...");
-          const directRes = await fetch(apiUrl, {
-            method: "GET",
-            headers: { 
-              "X-Auth-Token": API_KEY,
-              "Accept": "application/json"
-            },
-            cache: "no-store",
-            signal: controller.signal
-          });
-          if (directRes.ok) {
-            matchesData = await directRes.json();
-            console.log("✓ Direct call succeeded!");
-          } else {
-            throw new Error(`Direct API returned HTTP ${directRes.status}`);
-          }
-        } catch (directErr) {
-          console.warn("[Strategy 1] Direct call failed (expected on GitHub Pages):", directErr.message);
-          lastError = directErr;
-        }
-
-        // Strategy 2: Try CORS proxies (append API key to URL for proxied requests)
-        if (!matchesData) {
-          const proxiedApiUrl = API_KEY 
-            ? `${apiUrl}&authToken=${API_KEY}`
-            : apiUrl;
-          // Some proxies support passing the header via the URL; for football-data.org
-          // we need to embed the key. corsproxy.io forwards headers too.
-          
-          for (let i = 0; i < CORS_PROXIES.length; i++) {
-            try {
-              console.log(`[Strategy 2.${i + 1}] Trying CORS proxy ${i + 1}/${CORS_PROXIES.length}...`);
-              // For corsproxy.io, we can try with the auth header
-              const proxyUrl = CORS_PROXIES[i](apiUrl);
-              const proxyRes = await fetch(proxyUrl, {
-                method: "GET",
-                headers: { 
-                  "X-Auth-Token": API_KEY,
-                  "Accept": "application/json"
-                },
-                cache: "no-store",
-                signal: controller.signal
-              });
-              if (!proxyRes.ok) throw new Error(`Proxy ${i + 1} returned HTTP ${proxyRes.status}`);
-              matchesData = await proxyRes.json();
-              console.log(`✓ Proxy ${i + 1} succeeded!`);
-              break;
-            } catch (proxyErr) {
-              console.warn(`[Strategy 2.${i + 1}] Proxy ${i + 1} failed:`, proxyErr.message);
-              lastError = proxyErr;
-            }
-          }
-        }
-
-        if (!matchesData) {
-          throw lastError || new Error("All fetch strategies failed");
-        }
-
-        console.log(`✓ Successfully fetched ${matchesData.matches?.length || 0} matches`);
-        
-        if (!matchesData.matches || matchesData.matches.length === 0) {
-          console.warn("⚠ API returned empty matches array (tournament may not have started)");
-          return BASE_FIXTURES;
-        }
-        
-        const matches = matchesData.matches.map((match) => {
-          const homeId = resolveTeamId(match.homeTeam?.name || "");
-          const awayId = resolveTeamId(match.awayTeam?.name || "");
-          
-          return {
-            id: String(match.id),
-            homeName: match.homeTeam?.name || "TBD",
-            awayName: match.awayTeam?.name || "TBD",
-            homeId,
-            awayId,
-            homeScore: match.score?.fullTime?.home ?? match.score?.halfTime?.home,
-            awayScore: match.score?.fullTime?.away ?? match.score?.halfTime?.away,
-            status: match.status === "FINISHED" ? "Final" : match.status === "LIVE" ? "Live" : "Scheduled",
-            completed: match.status === "FINISHED",
-            date: match.utcDate || "",
-            stageText: match.stage || "Group Stage",
-            matchId: match.id
-          };
-        });
-        
-        console.log(`✓ Processed ${matches.length} matches`);
-        return matches;
-      } catch (error) {
-        console.error("API Fetch Error:", error.message);
-        throw error;
-      } finally {
-        clearTimeout(timeout);
+        console.log("[Strategy 1] Direct API call...");
+        const res = await timedFetch(apiUrl, {
+          headers: { "X-Auth-Token": API_KEY, "Accept": "application/json" },
+          cache: "no-store"
+        }, 5000);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        console.log("✓ Direct call succeeded!");
+        return parseApiResponse(data);
+      } catch (e) {
+        console.warn("[Strategy 1] Failed (expected on GitHub Pages):", e.message);
+        errors.push(e);
       }
+
+      // ── Strategy 2: corsproxy.io ─────────────────────────────────
+      // Forwards request headers. Use RAW URL (not encoded) after "?"
+      try {
+        const proxyUrl = `https://corsproxy.io/?${apiUrl}`;
+        console.log("[Strategy 2] corsproxy.io...");
+        const res = await timedFetch(proxyUrl, {
+          headers: { "X-Auth-Token": API_KEY, "Accept": "application/json" },
+          cache: "no-store"
+        }, 8000);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        console.log("✓ corsproxy.io succeeded!");
+        return parseApiResponse(data);
+      } catch (e) {
+        console.warn("[Strategy 2] corsproxy.io failed:", e.message);
+        errors.push(e);
+      }
+
+      // ── Strategy 3: allorigins.win ───────────────────────────────
+      // Does NOT forward headers. Returns JSON wrapper {contents: "..."}.
+      // Makes a simple GET (no custom headers → no preflight CORS issue).
+      // football-data.org allows limited unauthenticated access.
+      try {
+        const wrappedUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
+        console.log("[Strategy 3] allorigins.win (no-auth, JSON wrapper)...");
+        const res = await timedFetch(wrappedUrl, {
+          cache: "no-store"
+        }, 10000);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const wrapper = await res.json();
+        if (!wrapper.contents) throw new Error("Empty contents in wrapper");
+        const data = JSON.parse(wrapper.contents);
+        console.log("✓ allorigins.win succeeded!");
+        return parseApiResponse(data);
+      } catch (e) {
+        console.warn("[Strategy 3] allorigins.win failed:", e.message);
+        errors.push(e);
+      }
+
+      // ── Strategy 4: thingproxy.freeboard.io ──────────────────────
+      try {
+        const proxyUrl = `https://thingproxy.freeboard.io/fetch/${apiUrl}`;
+        console.log("[Strategy 4] thingproxy...");
+        const res = await timedFetch(proxyUrl, {
+          headers: { "Accept": "application/json" },
+          cache: "no-store"
+        }, 8000);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        console.log("✓ thingproxy succeeded!");
+        return parseApiResponse(data);
+      } catch (e) {
+        console.warn("[Strategy 4] thingproxy failed:", e.message);
+        errors.push(e);
+      }
+
+      // All strategies exhausted
+      console.error("All fetch strategies failed:", errors.map(e => e.message));
+      throw errors[errors.length - 1] || new Error("All fetch strategies failed");
     }
 
     // Legacy ESPN parsing removed - using football-data.org API instead
@@ -1739,7 +1728,7 @@
         location.reload();
       },
       testApi: async () => {
-        console.log("🧪 Testing API connection (via CORS proxy)...");
+        console.log("🧪 Testing API connection...");
         console.log("API Endpoint:", FOOTBALL_DATA_API);
         console.log("API Key:", API_KEY ? `✓ Set (${API_KEY.length} chars)` : "❌ Not set");
         
@@ -1750,38 +1739,17 @@
         }
         
         try {
-          const apiUrl = `${FOOTBALL_DATA_API}/competitions/${WORLD_CUP_2026_ID}/matches?status=SCHEDULED`;
-          console.log("Target:", apiUrl);
-          
-          // Use proxy chain same as production
-          let data = null;
-          for (let i = 0; i < CORS_PROXIES.length; i++) {
-            try {
-              const proxyUrl = CORS_PROXIES[i](apiUrl);
-              console.log(`Trying proxy ${i + 1}:`, proxyUrl.slice(0, 60) + "...");
-              const res = await fetch(proxyUrl, {
-                method: "GET",
-                headers: { "X-Auth-Token": API_KEY, "Accept": "application/json" },
-                cache: "no-store"
-              });
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              data = await res.json();
-              console.log(`✓ Proxy ${i + 1} worked!`);
-              break;
-            } catch (e) {
-              console.warn(`Proxy ${i + 1} failed:`, e.message);
-            }
-          }
-          
-          if (!data) {
-            console.error("❌ All proxies failed. Check your API key and network.");
-            return;
-          }
-          
-          console.log(`✓ Connected! Found ${data.matches?.length || 0} matches`);
-          return data;
+          console.log("Running full fetch pipeline (same as auto-refresh)...");
+          const matches = await fetchFromFootballDataAPI();
+          console.log(`✓ Connected! Got ${matches.length} matches`);
+          console.log("Sample:", matches.slice(0, 3).map(m => `${m.homeName} vs ${m.awayName}`));
+          return matches;
         } catch (e) {
-          console.error("✗ Connection Failed:", e.message);
+          console.error("✗ All strategies failed:", e.message);
+          console.log("Troubleshooting:");
+          console.log("  1. Check API key: wc2026.status()");
+          console.log("  2. Re-set key: wc2026.setApiKey('your-key')");
+          console.log("  3. Get new key: https://www.football-data.org/client");
         }
       },
       manualRefresh: async () => {
