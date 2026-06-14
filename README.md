@@ -31,8 +31,11 @@ For real-time live scores, register for a **free API key** from football-data.or
 1. Visit [football-data.org/client/register](https://www.football-data.org/client/register)
 2. Sign up (free tier includes 10 requests/minute — plenty for this tracker)
 3. Copy your API key from the dashboard
-4. When the tracker prompts on first load, paste your key
-5. Live data will auto-refresh every 60 seconds
+4. Open the tracker, press F12 → Console, and run:
+   ```javascript
+   wc2026.setApiKey("your-api-key-here")
+   ```
+5. The page reloads and live data will auto-refresh every 60 seconds
 
 **Without an API key?** The tracker still works with base fixtures (all 64 group matches pre-loaded).
 
@@ -108,13 +111,13 @@ Replace the `fetchFromFootballDataAPI()` function to use a different API.
    ```javascript
    wc2026.testApi()
    ```
-   Should show: `✓ Proxy responded` + match count
+   Should show: `✓ Proxy N worked!` + match count
 
 2. **Check API Key**:
    ```javascript
    wc2026.status()
    // Should show: apiKey: "dc29163c..." (first 8 chars)
-   // corsProxy: "allorigins.win (no setup needed)"
+   // apiStatus: "live" | "cached" | "error"
    ```
 
 3. **Force Immediate Refresh** (don't wait 60s):
@@ -125,7 +128,7 @@ Replace the `fetchFromFootballDataAPI()` function to use a different API.
 4. **Common Issues & Fixes**:
    | Issue | Solution |
    |-------|----------|
-   | `❌ Not set` in status | Enter API key when prompted on first load |
+   | `❌ Not set` in status | Run `wc2026.setApiKey("your-key")` in browser console |
    | No matches shown | Tournament may not have started; API returns empty until matches begin |
    | "Cached" badge persists | API unavailable; using saved data (auto-retries every 60s) |
    | Page shows README | File wasn't renamed to `index.html`. Check GitHub repo files. |
@@ -133,7 +136,7 @@ Replace the `fetchFromFootballDataAPI()` function to use a different API.
 5. **Re-enter API Key**:
    ```javascript
    wc2026.clearApiKey()
-   // Page reloads, prompts for new key
+   // Page reloads; set a new key with wc2026.setApiKey("...")
    ```
 
 6. **Full System Status**:
@@ -144,10 +147,18 @@ Replace the `fetchFromFootballDataAPI()` function to use a different API.
 
 ### How CORS Works Here
 
-- **No setup needed** — Uses `allorigins.win` (free CORS proxy)
-- **Automatic proxy routing** — All API calls wrapped transparently
-- **No rate limiting** — football-data.org handles the 10 req/min limit
-- **Fallback system** — If API fails, uses 15-min cached data
+The `football-data.org` API does **not** send `Access-Control-Allow-Origin` headers, so browsers block direct requests from GitHub Pages (a different origin). This tracker solves it with a **3-proxy fallback chain**:
+
+| Priority | Strategy | Details |
+|----------|----------|-----|
+| 1 | Direct API call | Tried first; works only if the API ever adds CORS headers |
+| 2a | `corsproxy.io` | Primary CORS proxy |
+| 2b | `api.allorigins.win` | Fallback proxy |
+| 2c | `thingproxy.freeboard.io` | Last-resort proxy |
+
+- **No setup needed** — Proxy routing is automatic and transparent
+- **Resilient** — If one proxy is down, the next one is tried
+- **Fallback system** — If all proxies fail, uses 15-min cached data or base fixtures
 - **Auto-refresh** — Updates every 60 seconds while page is open
 
 ### Other Issues
@@ -158,22 +169,20 @@ Replace the `fetchFromFootballDataAPI()` function to use a different API.
 | **Bracket slots empty** | Will auto-fill once group stage matches complete |
 | **Team links not working** | Check internet connection; team pages require live link access |
 
-### Best Experience: Deploy to GitHub Pages
-
-If you deploy to GitHub Pages (free hosting), CORS issues disappear entirely:
-1. Push to GitHub
-2. Enable GitHub Pages in repo settings
-3. Access via `https://username.github.io/fifa-2026-tracker/`
-4. **No CORS, always works!** 🎉
-
 ## 📊 Data Flow
 
 ```
 ┌─────────────────────┐
 │ Browser (Client)    │
-│ wc2026_tracker.html │
+│ index.html          │
 └──────────┬──────────┘
            │ fetch every 60s
+           ↓
+┌─────────────────────────────────┐
+│ CORS Proxy (corsproxy.io, etc.) │
+│ Wraps request, adds CORS headers│
+└──────────┬──────────────────────┘
+           │
            ↓
 ┌─────────────────────────────────┐
 │ football-data.org API v4        │
@@ -185,7 +194,7 @@ If you deploy to GitHub Pages (free hosting), CORS issues disappear entirely:
            ↓ Parse & Normalize
 ┌──────────────────────────────────┐
 │ Local State (liveMatches[])       │
-│ Compute standings, renderall views│
+│ Compute standings, render views   │
 └──────────────────────────────────┘
            │
            ↓ Render
@@ -224,7 +233,7 @@ git clone https://github.com/yourusername/fifa-2026-tracker.git
 # 2. Open in VS Code
 code fifa-2026-tracker
 
-# 3. Edit wc2026_tracker.html
+# 3. Edit index.html
 
 # 4. Test in browser (just open the file)
 

@@ -1522,41 +1522,102 @@
       return BASE_FIXTURES;
     }
     
+    // CORS proxy chain — football-data.org doesn't send CORS headers,
+    // so GitHub Pages (different origin) needs a server-side proxy.
+    const CORS_PROXIES = [
+      (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      (url) => `https://thingproxy.freeboard.io/fetch/${url}`
+    ];
+
+    async function fetchViaProxy(apiUrl, proxyFn, signal) {
+      const proxiedUrl = proxyFn(apiUrl);
+      console.log("  → Trying proxy:", proxiedUrl.slice(0, 60) + "...");
+      const res = await fetch(proxiedUrl, {
+        method: "GET",
+        headers: { "Accept": "application/json" },
+        cache: "no-store",
+        signal
+      });
+      if (!res.ok) throw new Error(`Proxy returned HTTP ${res.status}`);
+      return res.json();
+    }
+
     async function fetchFromFootballDataAPI() {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+      const timeout = setTimeout(() => controller.abort(), 15000);
       
       try {
+        // Build the target URL with the API key as a query param
+        // (since we can't send custom headers through most CORS proxies)
         const apiUrl = `${FOOTBALL_DATA_API}/competitions/${WORLD_CUP_2026_ID}/matches?status=SCHEDULED,LIVE,FINISHED`;
         
-        console.log("Fetching from:", apiUrl);
+        console.log("Target API:", apiUrl);
         console.log("API Key:", API_KEY ? "✓ Set (" + API_KEY.length + " chars)" : "✗ Not set");
-        
-        // Try direct API call (GitHub Pages can access it)
-        const matchesResponse = await fetch(apiUrl, {
-          method: "GET",
-          headers: { 
-            "X-Auth-Token": API_KEY,
-            "Accept": "application/json"
-          },
-          cache: "no-store",
-          signal: controller.signal
-        });
-        
-        console.log(`API Response Status: ${matchesResponse.status}`);
-        
-        if (!matchesResponse.ok) {
-          const errorText = await matchesResponse.text();
-          console.error(`API Error ${matchesResponse.status}:`, errorText.slice(0, 200));
-          
-          if (matchesResponse.status === 401 || matchesResponse.status === 403) {
-            console.warn("⚠️ API Key invalid or expired. Please check your token at https://www.football-data.org/client");
+
+        let matchesData = null;
+        let lastError = null;
+
+        // Strategy 1: Try direct fetch (works if API ever adds CORS headers)
+        try {
+          console.log("[Strategy 1] Direct API call...");
+          const directRes = await fetch(apiUrl, {
+            method: "GET",
+            headers: { 
+              "X-Auth-Token": API_KEY,
+              "Accept": "application/json"
+            },
+            cache: "no-store",
+            signal: controller.signal
+          });
+          if (directRes.ok) {
+            matchesData = await directRes.json();
+            console.log("✓ Direct call succeeded!");
+          } else {
+            throw new Error(`Direct API returned HTTP ${directRes.status}`);
           }
-          
-          throw new Error(`API returned HTTP ${matchesResponse.status}`);
+        } catch (directErr) {
+          console.warn("[Strategy 1] Direct call failed (expected on GitHub Pages):", directErr.message);
+          lastError = directErr;
         }
-        
-        const matchesData = await matchesResponse.json();
+
+        // Strategy 2: Try CORS proxies (append API key to URL for proxied requests)
+        if (!matchesData) {
+          const proxiedApiUrl = API_KEY 
+            ? `${apiUrl}&authToken=${API_KEY}`
+            : apiUrl;
+          // Some proxies support passing the header via the URL; for football-data.org
+          // we need to embed the key. corsproxy.io forwards headers too.
+          
+          for (let i = 0; i < CORS_PROXIES.length; i++) {
+            try {
+              console.log(`[Strategy 2.${i + 1}] Trying CORS proxy ${i + 1}/${CORS_PROXIES.length}...`);
+              // For corsproxy.io, we can try with the auth header
+              const proxyUrl = CORS_PROXIES[i](apiUrl);
+              const proxyRes = await fetch(proxyUrl, {
+                method: "GET",
+                headers: { 
+                  "X-Auth-Token": API_KEY,
+                  "Accept": "application/json"
+                },
+                cache: "no-store",
+                signal: controller.signal
+              });
+              if (!proxyRes.ok) throw new Error(`Proxy ${i + 1} returned HTTP ${proxyRes.status}`);
+              matchesData = await proxyRes.json();
+              console.log(`✓ Proxy ${i + 1} succeeded!`);
+              break;
+            } catch (proxyErr) {
+              console.warn(`[Strategy 2.${i + 1}] Proxy ${i + 1} failed:`, proxyErr.message);
+              lastError = proxyErr;
+            }
+          }
+        }
+
+        if (!matchesData) {
+          throw lastError || new Error("All fetch strategies failed");
+        }
+
         console.log(`✓ Successfully fetched ${matchesData.matches?.length || 0} matches`);
         
         if (!matchesData.matches || matchesData.matches.length === 0) {
@@ -1678,56 +1739,49 @@
         location.reload();
       },
       testApi: async () => {
-        console.log("🧪 Testing API connection...");
+        console.log("🧪 Testing API connection (via CORS proxy)...");
         console.log("API Endpoint:", FOOTBALL_DATA_API);
         console.log("API Key:", API_KEY ? `✓ Set (${API_KEY.length} chars)` : "❌ Not set");
         
         if (!API_KEY) {
-          console.warn("⚠️  No API key set. Get one at: https://www.football-data.org/client/register");
+          console.warn("⚠️  No API key set. Run: wc2026.setApiKey('your-key')");
+          console.warn("   Get a FREE key at: https://www.football-data.org/client/register");
           return;
         }
         
         try {
           const apiUrl = `${FOOTBALL_DATA_API}/competitions/${WORLD_CUP_2026_ID}/matches?status=SCHEDULED`;
-          console.log("Calling:", apiUrl);
+          console.log("Target:", apiUrl);
           
-          const res = await fetch(apiUrl, {
-            method: "GET",
-            headers: { 
-              "X-Auth-Token": API_KEY,
-              "Accept": "application/json"
-            },
-            cache: "no-store"
-          });
+          // Use proxy chain same as production
+          let data = null;
+          for (let i = 0; i < CORS_PROXIES.length; i++) {
+            try {
+              const proxyUrl = CORS_PROXIES[i](apiUrl);
+              console.log(`Trying proxy ${i + 1}:`, proxyUrl.slice(0, 60) + "...");
+              const res = await fetch(proxyUrl, {
+                method: "GET",
+                headers: { "X-Auth-Token": API_KEY, "Accept": "application/json" },
+                cache: "no-store"
+              });
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              data = await res.json();
+              console.log(`✓ Proxy ${i + 1} worked!`);
+              break;
+            } catch (e) {
+              console.warn(`Proxy ${i + 1} failed:`, e.message);
+            }
+          }
           
-          console.log(`API Response Status: ${res.status}`);
-          
-          if (res.status === 401 || res.status === 403) {
-            console.error("❌ Unauthorized: API key is invalid. Get a new one at: https://www.football-data.org/client");
+          if (!data) {
+            console.error("❌ All proxies failed. Check your API key and network.");
             return;
           }
           
-          if (!res.ok) {
-            console.error(`❌ API Error: ${res.status} ${res.statusText}`);
-            return;
-          }
-          
-          const data = await res.json();
           console.log(`✓ Connected! Found ${data.matches?.length || 0} matches`);
-          
-          if (data.matches && data.matches.length > 0) {
-            console.log(`✓ API is working perfectly! Next auto-refresh in ${Math.round(REFRESH_MS / 1000)}s`);
-          } else {
-            console.log("⚠ API returned no matches (tournament may not have started yet)");
-          }
-          
           return data;
         } catch (e) {
           console.error("✗ Connection Failed:", e.message);
-          console.log("Possible causes:");
-          console.log("  1. Invalid API key - get new one at https://www.football-data.org/client");
-          console.log("  2. API rate limit hit (10 req/min) - wait 60s");
-          console.log("  3. Network error - check internet connection");
         }
       },
       manualRefresh: async () => {
@@ -1740,26 +1794,11 @@
     console.log("📊 WC 2026 Tracker loaded on GitHub Pages");
     console.log("🚀 Test connection: wc2026.testApi()");
     console.log("📊 Check status: wc2026.status()");
-    // Prompt for API key if not set
     if (!API_KEY) {
-      const userKey = prompt(
-        "🔑 Enter your football-data.org API key\n\n" +
-        "Get a FREE key:\n" +
-        "1. Visit: https://www.football-data.org/client/register\n" +
-        "2. Sign up (takes 30 seconds)\n" +
-        "3. Copy the token from your dashboard\n" +
-        "4. Paste it here\n\n" +
-        "Leave blank to use base fixtures only\n" +
-        "(You'll need the key to see live scores)",
-        ""
-      );
-      if (userKey && userKey.trim()) {
-        localStorage.setItem("FOOTBALL_DATA_API_KEY", userKey.trim());
-        console.log("✓ API key saved. Refreshing...");
-        location.reload();
-      } else {
-        console.log("⚠ No API key provided. Using base fixtures only.");
-      }
+      console.log("⚠ No API key set — showing base fixtures.");
+      console.log("🔑 To enable live scores, run in console:");
+      console.log('   wc2026.setApiKey("your-football-data-org-key")');
+      console.log("   Get a FREE key: https://www.football-data.org/client/register");
     } else {
       console.log("✓ API key loaded from storage");
     }
