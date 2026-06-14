@@ -1583,51 +1583,50 @@
         errors.push(e);
       }
 
-      // ── Strategy 2: corsproxy.io ─────────────────────────────────
-      // Forwards request headers. Use RAW URL (not encoded) after "?"
+      // ── Strategy 2: corsproxy.io (Standard URL-encoded) ──────────
+      // Standard recommended way to use corsproxy.io with custom headers.
       try {
-        const proxyUrl = `https://corsproxy.io/?${apiUrl}`;
-        console.log("[Strategy 2] corsproxy.io...");
+        const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(apiUrl)}`;
+        console.log("[Strategy 2] corsproxy.io (Standard URL-encoded)...");
         const res = await timedFetch(proxyUrl, {
           headers: { "X-Auth-Token": API_KEY, "Accept": "application/json" },
           cache: "no-store"
         }, 8000);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        console.log("✓ corsproxy.io succeeded!");
+        console.log("✓ corsproxy.io (Standard) succeeded!");
         return parseApiResponse(data);
       } catch (e) {
-        console.warn("[Strategy 2] corsproxy.io failed:", e.message);
+        console.warn("[Strategy 2] corsproxy.io (Standard) failed:", e.message);
         errors.push(e);
       }
 
-      // ── Strategy 3: allorigins.win ───────────────────────────────
-      // Does NOT forward headers. Returns JSON wrapper {contents: "..."}.
-      // Makes a simple GET (no custom headers → no preflight CORS issue).
-      // football-data.org allows limited unauthenticated access.
+      // ── Strategy 3: corsproxy.io (reqHeaders injection) ──────────
+      // Bypasses browser custom headers preflight (OPTIONS check) entirely.
       try {
-        const wrappedUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
-        console.log("[Strategy 3] allorigins.win (no-auth, JSON wrapper)...");
-        const res = await timedFetch(wrappedUrl, {
+        const headerParam = `X-Auth-Token:${API_KEY}`;
+        const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(apiUrl)}&reqHeaders=${encodeURIComponent(headerParam)}`;
+        console.log("[Strategy 3] corsproxy.io (reqHeaders injection)...");
+        const res = await timedFetch(proxyUrl, {
+          headers: { "Accept": "application/json" },
           cache: "no-store"
-        }, 10000);
+        }, 8000);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const wrapper = await res.json();
-        if (!wrapper.contents) throw new Error("Empty contents in wrapper");
-        const data = JSON.parse(wrapper.contents);
-        console.log("✓ allorigins.win succeeded!");
+        const data = await res.json();
+        console.log("✓ corsproxy.io (reqHeaders) succeeded!");
         return parseApiResponse(data);
       } catch (e) {
-        console.warn("[Strategy 3] allorigins.win failed:", e.message);
+        console.warn("[Strategy 3] corsproxy.io (reqHeaders) failed:", e.message);
         errors.push(e);
       }
 
       // ── Strategy 4: thingproxy.freeboard.io ──────────────────────
+      // Forwards request headers. Make sure to send the auth token.
       try {
         const proxyUrl = `https://thingproxy.freeboard.io/fetch/${apiUrl}`;
         console.log("[Strategy 4] thingproxy...");
         const res = await timedFetch(proxyUrl, {
-          headers: { "Accept": "application/json" },
+          headers: { "X-Auth-Token": API_KEY, "Accept": "application/json" },
           cache: "no-store"
         }, 8000);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1639,11 +1638,28 @@
         errors.push(e);
       }
 
+      // ── Strategy 5: cors.eu.org ──────────────────────────────────
+      // Prepend format: https://cors.eu.org/[targetURL]
+      try {
+        const proxyUrl = `https://cors.eu.org/${apiUrl}`;
+        console.log("[Strategy 5] cors.eu.org...");
+        const res = await timedFetch(proxyUrl, {
+          headers: { "X-Auth-Token": API_KEY, "Accept": "application/json" },
+          cache: "no-store"
+        }, 8000);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        console.log("✓ cors.eu.org succeeded!");
+        return parseApiResponse(data);
+      } catch (e) {
+        console.warn("[Strategy 5] cors.eu.org failed:", e.message);
+        errors.push(e);
+      }
+
       // All strategies exhausted
       console.error("All fetch strategies failed:", errors.map(e => e.message));
       throw errors[errors.length - 1] || new Error("All fetch strategies failed");
     }
-
     // Legacy ESPN parsing removed - using football-data.org API instead
     function parseEspnContents(contents) {
       console.log("ESPN parsing deprecated; using football-data.org API");
