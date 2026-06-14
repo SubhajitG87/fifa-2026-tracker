@@ -89,7 +89,7 @@ Edit `index.html` and modify:
 ```javascript
 const REFRESH_MS = 60000;           // Polling interval (ms)
 const CACHE_DURATION_MS = 15 * 60 * 1000; // Cache duration
-const WORLD_CUP_2026_ID = 730;      // football-data.org competition ID
+const WORLD_CUP_2026_ID = 2000;      // football-data.org competition ID
 ```
 
 ### Add Your Own Data Source
@@ -188,7 +188,7 @@ The `football-data.org` API does **not** send `Access-Control-Allow-Origin` head
            ↓
 ┌─────────────────────────────────┐
 │ football-data.org API v4        │
-│ /competitions/730/matches       │
+│ /competitions/2000/matches      │
 │ (returns: 64 group matches,     │
 │  32 knockout matches, scores)   │
 └──────────┬──────────────────────┘
