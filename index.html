@@ -1535,16 +1535,13 @@
         if (res.ok) {
           const data = await res.json();
           if (data.matches && data.matches.length > 0) return data;
-          // Proxy returned empty or error payload — fall through
         }
       } catch (e) {
         // Not on Netlify, or function not deployed — continue
       }
 
-      // Strategy 2: Direct API call (only works on GitHub Pages if CORS headers eventually allow)
-      if (API_KEY) {
-        try { return await fetchFromFootballDataAPI(); } catch (e) { /* fall through */ }
-      }
+      // Strategy 2 — Direct API call removed: api.football-data.org does not support CORS from browsers.
+      // Use the Netlify serverless function (Strategy 1) for live data.
 
       // Strategy 3: Use pre-loaded base fixtures
       return BASE_FIXTURES;
@@ -1653,7 +1650,7 @@
       status: () => ({ apiKey: API_KEY ? `${API_KEY.slice(0, 8)}...` : "❌ Not set", apiStatus, matchCount: liveMatches.length, refreshCount, lastSync: lastRefreshedAt ? formatIST(lastRefreshedAt) : "Never", cacheAge: cachedMatches ? Math.round((Date.now() - cacheTimestamp) / 1000) + "s" : "No cache", favourites: favouriteTeams }),
       setApiKey: (key) => { if (!key || key.length < 20) { console.error("Invalid key"); return; } localStorage.setItem("FOOTBALL_DATA_API_KEY", key.trim()); location.reload(); },
       clearApiKey: () => { localStorage.removeItem("FOOTBALL_DATA_API_KEY"); location.reload(); },
-      testApi: async () => { if (!API_KEY) { console.warn("No API key. Run: wc2026.setApiKey('your-key')"); return; } try { const m = await fetchFromFootballDataAPI(); console.log(`✓ Connected! ${m.length} matches`); return m; } catch (e) { console.error("✗ Failed:", e.message); } },
+      testApi: async () => { if (!API_KEY) { console.warn("No API key. Run: wc2026.setApiKey('your-key')"); return; } try { const res = await fetch(NETLIFY_PROXY, { cache: "no-store" }); if (!res.ok) throw new Error(`HTTP ${res.status}`); const d = await res.json(); console.log(`✓ Connected! ${(d.matches||[]).length} matches`); return d; } catch (e) { console.error("✗ Failed. The Netlify proxy is not deployed. Use base fixtures for now:", e.message); } },
       manualRefresh: async () => { await refreshScores(); console.log("✓ Refresh complete"); },
       addFav: (id) => { if (!favouriteTeams.includes(id)) { favouriteTeams.push(id); localStorage.setItem("wc2026_favs", JSON.stringify(favouriteTeams)); render(); } },
       removeFav: (id) => { favouriteTeams = favouriteTeams.filter(x => x !== id); localStorage.setItem("wc2026_favs", JSON.stringify(favouriteTeams)); render(); },
