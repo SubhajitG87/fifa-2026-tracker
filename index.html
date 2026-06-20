@@ -1127,6 +1127,7 @@
     const TOURNAMENT_END = new Date("2026-07-19T23:59:59Z");
     const TOTAL_TOURNAMENT_DAYS = 39;
     const NETLIFY_PROXY = window.location.origin + "/.netlify/functions/matches";
+    const NETLIFY_PROXY_FALLBACK = "https://6a36d8966db429eeb14d71c0--fifa-2026-tracker.netlify.app/.netlify/functions/matches";
 
     const byId = (id) => document.getElementById(id);
 
@@ -1529,21 +1530,27 @@
     }
 
     async function fetchLiveMatches() {
-      // Strategy 1: Netlify serverless function proxy (works on deployment — adds CORS headers server-side)
-      try {
-        const res = await fetch(NETLIFY_PROXY, { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.matches && data.matches.length > 0) return data;
-        }
-      } catch (e) {
-        // Not on Netlify, or function not deployed — continue
-      }
+      // Strategy 1: Netlify serverless function proxy (local / same-origin)
+      const tryFetch = async (url) => {
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.matches && data.matches.length > 0) return data;
+          }
+        } catch (e) { /* continue */ }
+        return null;
+      };
 
-      // Strategy 2 — Direct API call removed: api.football-data.org does not support CORS from browsers.
-      // Use the Netlify serverless function (Strategy 1) for live data.
+      // Try same-origin Netlify proxy first (works when deployed on Netlify)
+      let result = await tryFetch(NETLIFY_PROXY);
+      if (result) return result;
 
-      // Strategy 3: Use pre-loaded base fixtures
+      // Try the deployed Netlify function fallback (works from GitHub Pages)
+      result = await tryFetch(NETLIFY_PROXY_FALLBACK);
+      if (result) return result;
+
+      // Fall back to pre-loaded base fixtures
       return BASE_FIXTURES;
     }
 
