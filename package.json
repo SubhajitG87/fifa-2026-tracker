@@ -1,0 +1,14 @@
+{
+  "name": "fifa-2026-tracker",
+  "version": "1.0.0",
+  "description": "FIFA World Cup 2026 Live Tracker — Netlify Functions for API proxy",
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "@netlify/functions": "^2.8.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  }
+}

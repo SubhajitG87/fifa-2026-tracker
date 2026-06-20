@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="fBall" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f5f5f5"/>
+      <stop offset="100%" style="stop-color:#d4d4d4"/>
+    </linearGradient>
+    <linearGradient id="fRing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd86a"/>
+      <stop offset="100%" style="stop-color:#a67c1a"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="8" fill="#10251f"/>
+  <circle cx="50" cy="50" r="42" fill="url(#fBall)" stroke="#bbb" stroke-width="0.5"/>
+  <polygon points="50,37 58,43 56,51 44,51 42,43" fill="#10251f" stroke="#333" stroke-width="0.5"/>
+  <polygon points="35,35 42,31 46,37 42,43 36,41" fill="#10251f" stroke="#333" stroke-width="0.5"/>
+  <polygon points="65,35 58,31 54,37 58,43 64,41" fill="#10251f" stroke="#333" stroke-width="0.5"/>
+  <polygon points="34,57 42,54 44,61 40,66 33,63" fill="#10251f" stroke="#333" stroke-width="0.5"/>
+  <polygon points="66,57 58,54 56,61 60,66 67,63" fill="#10251f" stroke="#333" stroke-width="0.5"/>
+  <polygon points="48,65 52,65 53,70 50,74 47,70" fill="#10251f" stroke="#333" stroke-width="0.5"/>
+  <line x1="42" y1="43" x2="35" y2="35" stroke="#10251f" stroke-width="0.8"/>
+  <line x1="58" y1="43" x2="65" y2="35" stroke="#10251f" stroke-width="0.8"/>
+  <line x1="44" y1="51" x2="34" y2="57" stroke="#10251f" stroke-width="0.8"/>
+  <line x1="56" y1="51" x2="66" y2="57" stroke="#10251f" stroke-width="0.8"/>
+  <line x1="44" y1="61" x2="48" y2="70" stroke="#10251f" stroke-width="0.8"/>
+  <line x1="56" y1="61" x2="52" y2="70" stroke="#10251f" stroke-width="0.8"/>
+  <circle cx="50" cy="50" r="44" fill="none" stroke="url(#fRing)" stroke-width="2"/>
+</svg>
